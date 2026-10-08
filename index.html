@@ -266,10 +266,16 @@
 <body>
 
 <div class="wrap">
-  <nav class="tabs no-print" role="tablist" aria-label="Views">
+  <nav class="tabs no-print" role="tablist" aria-label="Views" hidden>
     <button type="button" role="tab" id="tabForm" aria-selected="true">New canvass</button>
-    <button type="button" role="tab" id="tabSum" aria-selected="false">Summary <span class="count" id="sumCount">0</span></button>
+    <button type="button" role="tab" id="tabSum" aria-selected="false" hidden>Summary <span class="count" id="sumCount">0</span></button>
   </nav>
+  <div class="no-print" id="accessBar" hidden style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px;padding:12px 16px;border:1px solid var(--grain);background:var(--grain-soft);border-radius:12px">
+    <label for="accessCode" style="font-weight:600;font-size:13px">Access code</label>
+    <input class="inp" id="accessCode" type="password" autocomplete="off" placeholder="Enter the code from Vienovo Procurement" style="flex:1;min-width:200px;width:auto">
+    <button type="button" class="btn primary" id="accessSave" style="padding:10px 16px;font-size:14px">Save code</button>
+    <span id="accessMsg" style="flex-basis:100%;font-size:12.5px;color:var(--muted)">Needed to submit and to view the Summary.</span>
+  </div>
   <form id="form" novalidate>
     <header class="head">
       <div class="head-main">
@@ -428,7 +434,7 @@
             <button type="button" class="btn primary" id="newBtn" style="padding:10px 16px;font-size:14px">New canvass</button>
             <button type="button" class="btn" id="copyBtn" style="grid-column:span 2">Copy submission data</button>
             <button type="button" class="btn" id="dlBtn" style="grid-column:span 2" hidden>Download submission (.json)</button>
-            <button type="button" class="btn ghost" id="toSum" style="grid-column:span 2">See all canvasses &rarr;</button>
+            <button type="button" class="btn ghost" id="toSum" style="grid-column:span 2" hidden>See all canvasses &rarr;</button>
           </div>
           <details><summary>Show submission data</summary><textarea id="recBox" readonly aria-label="Submission data"></textarea></details>
           <p id="doneNote">This form does not send anything on its own. Copy or download the submission data and send it to Vienovo Procurement together with the COA file.</p>
@@ -505,7 +511,7 @@
   var COUNTRIES=["Philippines","Argentina","Australia","Belgium","Brazil","Canada","China","France","Germany","India","Indonesia","Japan","Malaysia","Netherlands","New Zealand","Paraguay","South Korea","Spain","Thailand","Ukraine","United States","Vietnam","Other"];
   var VAT=0.12, KEY="vienovo-canvass-draft", MAX_MB=10;
   /* Paste the Google Apps Script web app URL here (see SETUP-GOOGLE-SHEET.md). Works in a plain .html file, no Claude account needed. */
-  var SHEET_URL="https://script.google.com/macros/s/AKfycbzR8gQCD6IhICeR-AughOK9EWI6ya1vFsrQmNV-V5iPT-sDHAOMgtwAqiVHx6CnjKh18Q/exec";
+  var SHEET_URL="https://script.google.com/macros/s/AKfycbxIUEHibbjrO6yoeVnOlJsAFe1KcQF4JVjXsd34vlz4iUUHbY0fcLKA032rhK94kcwfTw/exec";
   /* No-Apps-Script option: a Google Form receives submissions, the linked Sheet is published as CSV (see SETUP-GOOGLE-FORM.md). */
   var FORM_URL="";   /* https://docs.google.com/forms/d/e/.../formResponse */
   var FORM_ENTRY=""; /* entry.1234567890 */
@@ -808,6 +814,7 @@
   }
   function doSubmit(mode){
     if(locked&&mode!=="submitted")return;
+    if(SHEETED&&!getCode()){showAccess("Enter the access code to submit canvasses.",true);toast("Enter the access code first.","err");$("#accessCode").focus();return}
     attempted=true;coaKey="";update();
     var n=Object.keys(errors).length;
     if(n){
@@ -910,7 +917,7 @@
     return Object.keys(m).map(function(k){return m[k]});
   }
   function setShareNote(ok){
-    $("#doneNote").textContent=ok?"Your canvass was also sent to the shared Vienovo summary. You can copy the data below for your own records."
+    $("#doneNote").textContent=ok?"Your canvass was sent to Vienovo Procurement. You can copy the data below for your own records."
       :"This form could not send your canvass automatically. Copy or download the submission data and send it to Vienovo Procurement together with the COA file.";
   }
   function parseCsv(t){
@@ -932,11 +939,25 @@
       remote=Object.keys(m).map(function(k){return m[k]});renderSummary();return true;
     }catch(e){return false}
   }
+  /* Shared access code: stored in this browser and sent with every Sheet request. */
+  var CODE_KEY="vienovo-canvass-code";
+  function getCode(){try{return localStorage.getItem(CODE_KEY)||""}catch(e){return ""}}
+  function showAccess(msg,bad){
+    var bar=$("#accessBar");bar.hidden=false;
+    var m=$("#accessMsg");m.textContent=msg;m.style.color=bad?"var(--danger)":"var(--muted)";
+  }
+  $("#accessSave").addEventListener("click",function(){
+    var v=$("#accessCode").value.trim();if(!v)return showAccess("Enter the access code first.",true);
+    try{localStorage.setItem(CODE_KEY,v)}catch(e){}
+    $("#accessBar").hidden=true;$("#accessCode").value="";pullSheet();toast("Access code saved");
+  });
   async function pullSheet(){
     if(FORMED)return pullForm();
     try{
-      var res=await fetch(SHEET_URL+(SHEET_URL.indexOf("?")>-1?"&":"?")+"t="+Date.now());
+      var res=await fetch(SHEET_URL+(SHEET_URL.indexOf("?")>-1?"&":"?")+"key="+encodeURIComponent(getCode())+"&t="+Date.now());
       var j=await res.json();
+      if(j.error){showAccess(getCode()?"That access code was not accepted. Check it and try again.":"Enter the access code to submit and view the Summary.",!!getCode());return false}
+      $("#accessBar").hidden=true;
       remote=(j.records||[]).filter(validRec);renderSummary();return true;
     }catch(e){return false}
   }
@@ -947,7 +968,7 @@
         /* the published CSV can lag a few minutes, so the note can't wait for it */
         setShareNote(true);setTimeout(pullSheet,5000);return;
       }
-      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(rec)});
+      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:getCode()},rec))});
       await new Promise(function(r){setTimeout(r,2500)});
       var ok=await pullSheet()&&remote.some(function(r){return r.ref===rec.ref});
       setShareNote(ok);
@@ -976,9 +997,9 @@
   }
   async function initShared(){
     if(SHEETED){
-      $("#tabSum").hidden=false;$("#toSum").hidden=false;$("#liveNote").hidden=false;
+      /* Monitoring happens in the Google Sheet, so the Summary tab stays hidden. */
       document.querySelector(".imp").hidden=true;
-      pullSheet();setInterval(function(){if(!document.hidden)pullSheet()},15000);
+      if(getCode())pullSheet();else showAccess("Enter the access code to submit canvasses.",false);
       return;
     }
     if(!window.claude||!window.claude.use)return;
