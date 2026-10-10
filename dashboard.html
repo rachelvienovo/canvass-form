@@ -308,6 +308,13 @@
     a{color:#000!important;text-decoration:none}
     table.list.cp,table.list.cp td.n,table.list.cp th{font-size:calc(9px * var(--pz,1))}table.list.cp td{padding:calc(2.5px * var(--pz,1)) 5px}table.list.cp .chip{font-size:calc(9px * var(--pz,1));padding:0 5px}
   }
+  .amodal{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px}
+  .amodal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;width:min(420px,100%);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .amodal h2{margin:0 0 4px;font-size:17px}.amodal p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+  .amodal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .abtn{border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:1px 8px;font:600 11px var(--font);cursor:pointer}
+  .abtn:hover{background:var(--accent);color:var(--accent-ink)}
+  .abtn.x{border-color:transparent;background:transparent;color:var(--muted);padding:1px 4px}.abtn.x:hover{color:var(--danger);background:transparent}
 </style>
 </head>
 <body>
@@ -333,16 +340,23 @@
       <div class="field"><label for="dType">Material type</label><select class="inp" id="dType"></select></div>
       <div class="field"><label for="dWh">Warehouse</label><select class="inp" id="dWh"></select></div>
       <div class="field"><label for="dBy">Submitted by</label><select class="inp" id="dBy"><option value="ALL">Everyone</option></select></div>
-      <div class="field"><label for="dStat">Status</label><select class="inp" id="dStat"><option value="ALL">All</option><option value="PENDING">Awaiting final bid</option><option value="FINAL">Final bid done</option></select></div>
+      <div class="field"><label for="dStat">Status</label><select class="inp" id="dStat"><option value="ALL">All</option><option value="PENDING">Awaiting final bid</option><option value="FINAL">Final bid done</option><option value="APPROVED">Approved</option><option value="UNAPPROVED">Not yet approved</option></select></div>
       <div class="field"><label for="dSort">Sort by</label><select class="inp" id="dSort"><option value="NEW">Newest first</option><option value="MAT">Material, lowest price first</option><option value="SUP">Supplier</option><option value="EXP">Quote expiry</option></select></div>
     </div>
-    <div class="tscroll"><table class="list cp"><colgroup><col style="width:9%"><col style="width:7%"><col style="width:17%"><col style="width:17%"><col style="width:9%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:10%"></colgroup><thead><tr>
-      <th>Canvass no.</th><th>Date</th><th>Material</th><th>Supplier</th><th class="n">Qty</th><th class="n">Quoted</th><th class="n">Final bid</th><th class="n">Grand total</th><th>Valid until</th>
+    <div class="tscroll"><table class="list cp"><colgroup><col style="width:8%"><col style="width:6%"><col style="width:14%"><col style="width:12%"><col style="width:8%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:8%"><col style="width:16%"></colgroup><thead><tr>
+      <th>Canvass no.</th><th>Date</th><th>Material</th><th>Supplier</th><th class="n">Qty</th><th class="n">Quoted</th><th class="n">Final bid</th><th class="n">Grand total</th><th>Valid until</th><th>Approval</th>
     </tr></thead><tbody id="dBody"></tbody></table>
     <div class="empty" id="dEmpty" hidden></div></div>
-    <p class="saved no-print" style="text-align:left;margin-top:8px">Click a canvass number to update its final bid. Prices are per unit (kg or MT). Green = final bid done, amber = awaiting final bid.</p>
+    <p class="saved no-print" style="text-align:left;margin-top:8px">Click a canvass number to update its final bid; use Approve once the final bid is agreed. Prices are per unit (kg or MT). Green = final bid done, amber = awaiting final bid.</p>
   </div>
 </div>
+
+<div class="amodal no-print" id="aModal" hidden><div class="box" role="dialog" aria-modal="true" aria-labelledby="aTitle">
+  <h2 id="aTitle"></h2><p id="aText"></p>
+  <div id="aNameBox"><label for="aName" style="font-weight:600;font-size:13px">Approved by</label><input class="inp" id="aName" type="text" autocomplete="name" placeholder="Your name"></div>
+  <div class="row"><button type="button" class="btn" id="aCancel">Cancel</button><button type="button" class="btn primary" id="aOk"></button></div>
+</div></div>
+<div class="toast" id="toast" hidden><div></div></div>
 
 <script>
 (function(){
@@ -398,6 +412,8 @@
       if(by!=="ALL"&&r.submittedBy!==by)return false;
       if(st==="PENDING"&&r.status==="final")return false;
       if(st==="FINAL"&&r.status!=="final")return false;
+      if(st==="APPROVED"&&!r.approved)return false;
+      if(st==="UNAPPROVED"&&r.approved)return false;
       if(q&&![r.ref,r.brand,r.origin,r.supplierName,r.supplierLocation,r.submittedBy].some(function(x){return (x||"").toLowerCase().indexOf(q)>-1}))return false;
       return true;
     });
@@ -415,7 +431,10 @@
     var live=rows.filter(function(r){var d=validity(r.validityDate).days;return d!==null&&d>=0}).length;
     var php=rows.filter(function(r){return (r.currency||"PHP")==="PHP"}).reduce(function(a,r){return a+(r.total||0)},0);
     var usd=rows.filter(function(r){return r.currency==="USD"}).reduce(function(a,r){return a+(r.total||0)},0);
-    var kp=[["Canvasses",rows.length+(rows.length!==all.length?" of "+all.length:"")],["Awaiting final bid",String(pend)],["Quotes still valid",live+" of "+rows.length],["Total (PHP)",money(php,"PHP")]];
+    var ap=rows.filter(function(r){return r.approved});
+    var sv={PHP:0,USD:0};ap.forEach(function(r){sv[r.currency==="USD"?"USD":"PHP"]+=r.savings||0});
+    var svTxt=(sv.USD&&!sv.PHP?"":money(sv.PHP,"PHP"))+(sv.USD?(sv.PHP?" + ":"")+money(sv.USD,"USD"):"");
+    var kp=[["Canvasses",rows.length+(rows.length!==all.length?" of "+all.length:"")],["Awaiting final bid",String(pend)],["Approved",ap.length+" of "+rows.length],["Savings on approved",svTxt],["Quotes still valid",live+" of "+rows.length],["Total (PHP)",money(php,"PHP")]];
     if(usd>0)kp.push(["Total (USD)",money(usd,"USD")]);
     $("#dKpis").innerHTML=kp.map(function(x){return '<div class="kpi"><small>'+x[0]+'</small><b class="tnum">'+esc(x[1])+'</b></div>'}).join("");
     fillBy();
@@ -430,10 +449,51 @@
         '<td class="n">'+pu(r.price)+'</td>'+
         '<td class="n" title="'+(fin?"Final bid done":"Awaiting final bid")+'">'+(hasFinal?'<b style="color:'+(fin?"var(--ok)":"var(--grain)")+'">'+pu(r.finalPrice)+'</b>':'<span style="color:var(--grain)">— awaiting</span>')+'</td>'+
         '<td class="n"><b>'+money(r.total,r.currency)+'</b></td>'+
-        '<td><span class="chip '+v.tone+'" title="'+esc(fmtDate(r.validityDate))+'">'+esc(r.validityDate?fmtDate(r.validityDate).replace(/, \d{4}$/,""):"—")+'</span></td></tr>';
+        '<td><span class="chip '+v.tone+'" title="'+esc(fmtDate(r.validityDate))+'">'+esc(r.validityDate?fmtDate(r.validityDate).replace(/, \d{4}$/,""):"—")+'</span></td>'+
+        '<td>'+approvalCell(r,hasFinal)+'</td></tr>';
     }).join("");
     var em=$("#dEmpty");em.hidden=rows.length>0;
     em.innerHTML=all.length?"<b>No canvasses match these filters</b>Clear the search or change a filter.":"<b>No canvasses to show</b>Enter the access code above to load the canvass list.";
+  }
+  function approvalCell(r,hasFinal){
+    var ref=esc(r.ref);
+    if(r.approved)return '<span class="chip ok" style="display:inline-block;max-width:calc(100% - 22px);overflow:hidden;text-overflow:ellipsis;vertical-align:middle" title="Approved by '+esc(r.approvedBy||"")+(r.approvedAt?" on "+esc(fmtDate(String(r.approvedAt).slice(0,10))):"")+'">&#10003; '+esc(r.approvedBy||"Approved")+'</span> <button type="button" class="abtn x no-print" data-revoke="'+ref+'" title="Revoke approval" aria-label="Revoke approval for '+ref+'">&#10005;</button>';
+    if(!hasFinal)return '<span style="color:var(--muted)" title="Enter a final bid price first">—</span>';
+    return '<button type="button" class="abtn no-print" data-approve="'+ref+'">Approve</button>';
+  }
+  /* ---- approve / revoke: saves the canvass back to the Sheet with approval fields ---- */
+  var pendingAct=null,NAME_KEY="vienovo-approver";
+  function toast(msg,tone){var t=$("#toast");t.className="toast"+(tone==="err"?" err":"");t.firstChild.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){t.hidden=true},4500)}
+  function openApproval(refNo,revoke){
+    var r=allSubs().filter(function(x){return x.ref===refNo})[0];if(!r)return;
+    if(!getCode()){showAccess("Enter the access code first.",true);return}
+    pendingAct={ref:refNo,revoke:revoke};
+    $("#aTitle").textContent=(revoke?"Revoke approval of ":"Approve ")+refNo;
+    $("#aText").textContent=revoke?r.brand+" · "+r.supplierName+". The canvass goes back to not approved.":r.brand+" · "+r.supplierName+" · final bid "+money(r.finalPrice,r.currency)+"/"+unit(r)+(r.savings?" · saves "+money(r.savings,r.currency):"");
+    $("#aNameBox").hidden=revoke;$("#aOk").textContent=revoke?"Revoke approval":"Approve";
+    try{$("#aName").value=localStorage.getItem(NAME_KEY)||""}catch(e){}
+    $("#aModal").hidden=false;(revoke?$("#aOk"):$("#aName")).focus();
+  }
+  function closeApproval(){$("#aModal").hidden=true;pendingAct=null}
+  async function saveApproval(){
+    var a=pendingAct;if(!a)return;
+    var r=allSubs().filter(function(x){return x.ref===a.ref})[0];if(!r)return closeApproval();
+    var name=$("#aName").value.trim();
+    if(!a.revoke&&!name){$("#aName").focus();return}
+    var now=new Date().toISOString(),rec=Object.assign({},r);
+    if(a.revoke){rec.approved=false;rec.approvedBy="";rec.approvedAt=null}
+    else{rec.approved=true;rec.approvedBy=name;rec.approvedAt=now;try{localStorage.setItem(NAME_KEY,name)}catch(e){}}
+    rec.updatedAt=now;
+    closeApproval();
+    var i=remote.indexOf(r);remote[i]=rec;renderDash();   /* show it right away; confirmed against the Sheet below */
+    toast("Saving…");
+    try{
+      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:getCode()},rec))});
+      await new Promise(function(res){setTimeout(res,2500)});
+      var ok=await pullSheet(),saved=remote.filter(function(x){return x.ref===rec.ref})[0];
+      if(ok&&saved&&!!saved.approved===!!rec.approved)toast(a.revoke?"Approval revoked for "+rec.ref:rec.ref+" approved");
+      else{if(ok){var j=remote.indexOf(saved);if(j>-1)remote[j]=saved;renderDash()}toast("The Sheet did not keep the approval for "+rec.ref+". Please try again or tell the administrator.","err")}
+    }catch(e){toast("Could not save the approval. Check your connection.","err");pullSheet()}
   }
   function fillBy(){
     var sel=$("#dBy"),cur=sel.value,names=[];
@@ -451,6 +511,13 @@
   /* shrink the table so every listed row prints on one landscape page */
   function fitPrint(){var n=document.querySelectorAll("#dBody tr").length;document.documentElement.style.setProperty("--pz",String(Math.max(0.5,Math.min(1,22/Math.max(n,1)))))}
   window.addEventListener("beforeprint",fitPrint);window.__fit=fitPrint;
+  $("#dBody").addEventListener("click",function(e){
+    var a=e.target.closest("[data-approve]"),v=e.target.closest("[data-revoke]");
+    if(a)openApproval(a.dataset.approve,false);else if(v)openApproval(v.dataset.revoke,true);
+  });
+  $("#aCancel").addEventListener("click",closeApproval);
+  $("#aOk").addEventListener("click",saveApproval);
+  $("#aModal").addEventListener("keydown",function(e){if(e.key==="Escape")closeApproval();if(e.key==="Enter"&&e.target.id==="aName")saveApproval()});
   $("#dPrint").addEventListener("click",function(){fitPrint();window.print()});
   fillDash();
   if(getCode())pullSheet();else{showAccess("Enter the access code to view the dashboard.",false);renderDash()}
