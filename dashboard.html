@@ -213,6 +213,7 @@
   table.list th{position:sticky;top:0;background:var(--bg);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
   table.list td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
   table.list tr:last-child td{border-bottom:0}
+  table.list th.n{text-align:right}
   table.list td.n{text-align:right;white-space:nowrap;font-family:var(--mono);font-variant-numeric:tabular-nums}
   table.list small{display:block;color:var(--muted);font-size:12px}
   .empty{padding:40px 16px;text-align:center;color:var(--muted)}
@@ -316,17 +317,21 @@
       <button type="button" class="btn primary" id="accessSave" style="padding:10px 16px;font-size:14px">Save code</button>
       <span id="accessMsg" style="flex-basis:100%;font-size:12.5px;color:var(--muted)">Needed to view the dashboard.</span>
     </div>
+    <div class="kpis" id="dKpis"></div>
     <div class="dtools no-print">
+      <div class="field" style="flex:2;min-width:220px"><label for="dQ">Search</label><input class="inp" id="dQ" type="search" placeholder="Canvass no., material, supplier, name"></div>
       <div class="field"><label for="dType">Material type</label><select class="inp" id="dType"></select></div>
       <div class="field"><label for="dWh">Warehouse</label><select class="inp" id="dWh"></select></div>
-      <div class="field"><label for="dCur">Currency</label><select class="inp" id="dCur"><option value="PHP">PHP &#8369;</option><option value="USD">USD $</option></select></div>
-      <div class="field"><label for="dPer">Submitted</label><select class="inp" id="dPer"><option value="0">All time</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option></select></div>
+      <div class="field"><label for="dStat">Status</label><select class="inp" id="dStat"><option value="ALL">All</option><option value="PENDING">Awaiting final bid</option><option value="FINAL">Final bid done</option></select></div>
+      <div class="field"><label for="dSort">Sort by</label><select class="inp" id="dSort"><option value="NEW">Newest first</option><option value="MAT">Material, lowest price first</option><option value="SUP">Supplier</option><option value="EXP">Quote expiry</option></select></div>
     </div>
-    <div class="kpis" id="dKpis"></div>
-    <div class="dgrid" id="dGrid"></div>
+    <div class="tscroll"><table class="list"><thead><tr>
+      <th>Canvass no.</th><th>Material</th><th>Supplier</th><th class="n">Quantity</th><th class="n">Quoted price</th><th class="n">Final bid price</th><th class="n">Grand total</th><th>Valid until</th><th>Status</th>
+    </tr></thead><tbody id="dBody"></tbody></table>
+    <div class="empty" id="dEmpty" hidden></div></div>
+    <p class="saved no-print" style="text-align:left;margin-top:12px">Click a canvass number to open it in the form and update the final bid. Prices are per unit as entered (kg or MT).</p>
   </div>
 </div>
-<div class="dtip" id="dtip" hidden></div>
 
 <script>
 (function(){
@@ -372,110 +377,54 @@
     $("#accessCode").value="";pullSheet();
   });
   $("#dRefresh").addEventListener("click",function(){if(getCode())pullSheet();else showAccess("Enter the access code to view the dashboard.",false)});
-  /* ---- dashboard ---- */
-  var TYPE_VAR={MACRO:"var(--s1)",MICRO:"var(--s2)",PACKAGING:"var(--s3)",FEEDTAGS:"var(--s4)"};
+  /* ---- dashboard: priced canvass listing ---- */
+  function unit(r){return r.uom==="MT"?"MT":"kg"}
   function dFilter(){
-    var t=$("#dType").value,w=$("#dWh").value,per=Number($("#dPer").value),today=isoToday();
-    return allSubs().filter(function(r){
+    var q=$("#dQ").value.trim().toLowerCase(),t=$("#dType").value,w=$("#dWh").value,st=$("#dStat").value,sort=$("#dSort").value;
+    var rows=allSubs().filter(function(r){
       if(t!=="ALL"&&r.materialType!==t)return false;
       if(w!=="ALL"&&r.deliveryWarehouse!==w)return false;
-      if(per>0){var d=(r.submittedAt||"").slice(0,10);if(!d||dayDiff(d,today)>per)return false}
+      if(st==="PENDING"&&r.status==="final")return false;
+      if(st==="FINAL"&&r.status!=="final")return false;
+      if(q&&![r.ref,r.brand,r.origin,r.supplierName,r.supplierLocation,r.submittedBy].some(function(x){return (x||"").toLowerCase().indexOf(q)>-1}))return false;
       return true;
     });
+    var cmp={
+      NEW:function(a,b){return (b.submittedAt||"")<(a.submittedAt||"")?-1:1},
+      MAT:function(a,b){return (a.brand||"").localeCompare(b.brand||"")||perKg(a)-perKg(b)},
+      SUP:function(a,b){return (a.supplierName||"").localeCompare(b.supplierName||"")||(a.brand||"").localeCompare(b.brand||"")},
+      EXP:function(a,b){return (a.validityDate||"9999")<(b.validityDate||"9999")?-1:1}
+    }[sort];
+    return rows.sort(cmp);
   }
-  function tally(rows,keyFn,valFn){
-    var m={};rows.forEach(function(r){var k=keyFn(r);if(k==null||k==="")return;m[k]=(m[k]||0)+valFn(r)});
-    return Object.keys(m).map(function(k){return {k:k,v:m[k]}}).sort(function(a,b){return b.v-a.v});
-  }
-  function hbars(items,fmt,colorFn,limit){
-    items=items.slice(0,limit||10);
-    if(!items.length)return '<div class="dnone">No data for these filters</div>';
-    var max=Math.max.apply(null,items.map(function(i){return i.v}))||1;
-    return '<div class="hb">'+items.map(function(i){
-      var lab=i.label||i.k;
-      return '<span class="l" title="'+esc(lab)+'">'+esc(lab)+'</span><span class="t" data-tip="'+esc(lab+": "+fmt(i.v))+'"><i style="width:'+Math.max(1,i.v/max*100)+'%;'+(colorFn?'background:'+colorFn(i):'')+'"></i></span><span class="v">'+esc(fmt(i.v))+'</span>';
-    }).join("")+'</div>';
-  }
-  function cols(items,fmt){
-    if(!items.length)return '<div class="dnone">No data for these filters</div>';
-    var max=Math.max.apply(null,items.map(function(i){return i.v}))||1;
-    return '<div class="cols">'+items.map(function(i){return '<div class="c" data-tip="'+esc(i.label+": "+fmt(i.v))+'"><b>'+(i.v?esc(fmt(i.v)):"")+'</b><i style="height:'+(i.v/max*115)+'px"></i></div>'}).join("")+'</div>'+
-      '<div class="cx">'+items.map(function(i,n){return '<span>'+(n%Math.ceil(items.length/4)===0?esc(i.label):"")+'</span>'}).join("")+'</div>';
-  }
-  function stack(parts){
-    var tot=parts.reduce(function(a,x){return a+x.v},0);
-    if(!tot)return '<div class="dnone">No data for these filters</div>';
-    return '<div class="stk">'+parts.filter(function(x){return x.v>0}).map(function(x){return '<i style="flex:'+x.v+';background:'+x.c+'" data-tip="'+esc(x.l+": "+x.v+" ("+Math.round(x.v/tot*100)+"%)")+'"></i>'}).join("")+'</div>'+
-      '<div class="lg">'+parts.map(function(x){return '<span><i style="background:'+x.c+'"></i>'+esc(x.l)+' <em>'+x.v+' · '+Math.round(x.v/tot*100)+'%</em></span>'}).join("")+'</div>';
-  }
-  function monday(iso){var d=new Date(iso+"T00:00:00"),k=(d.getDay()+6)%7;d.setDate(d.getDate()-k);return d.toLocaleDateString("en-CA")}
-  function addDays(iso,n){var d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return d.toLocaleDateString("en-CA")}
-  function series(rows,dateFn,keyFn,labFn,nextFn,valFn,cap){
-    var m={},keys=[];
-    rows.forEach(function(r){var d=dateFn(r);if(!d)return;var k=keyFn(d);m[k]=(m[k]||0)+valFn(r);keys.push(k)});
-    if(!keys.length)return [];
-    keys.sort();var out=[],k=keys[0],end=keys[keys.length-1],n=0;
-    while(k<=end&&n++<400){out.push({k:k,label:labFn(k),v:m[k]||0});k=nextFn(k)}
-    return out.slice(-cap);
-  }
-  function card(title,sub,body,wide){return '<section class="dcard'+(wide?' wide':'')+'"><h3>'+esc(title)+'</h3><p class="sub">'+esc(sub)+'</p>'+body+'</section>'}
-  function shortM(iso){return new Date(iso+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric"})}
   function renderDash(){
-    var cur=$("#dCur").value,rows=dFilter(),all=allSubs();
-    var inCur=rows.filter(function(r){return (r.currency||"PHP")===cur});
-    var f=function(v){return money(v,cur)},fv=function(v){return v>=1e6?(cur==="USD"?"$":"₱")+num(v/1e6,2)+"M":v>=1e4?(cur==="USD"?"$":"₱")+num(v/1e3,1)+"K":money(v,cur)};
-    var spend=inCur.reduce(function(a,r){return a+(r.total||0)},0),save=inCur.reduce(function(a,r){return a+(r.savings||0)},0);
-    var quoted=spend+save,mt=rows.reduce(function(a,r){return a+(r.qtyKg||0)},0)/1000;
-    var sup={};rows.forEach(function(r){if(r.supplierName)sup[r.supplierName]=1});
-    var vd=rows.map(function(r){return validity(r.validityDate)});
-    var valid=vd.filter(function(v){return v.days!==null&&v.days>3}).length,soon=vd.filter(function(v){return v.days!==null&&v.days>=0&&v.days<=3}).length,
-        exp=vd.filter(function(v){return v.days!==null&&v.days<0}).length,nod=vd.filter(function(v){return v.days===null}).length;
-    var coaYes=rows.filter(function(r){return r.coaAvailable==="yes"}).length,fin=rows.filter(function(r){return r.status==="final"}).length;
-    var pct=function(a,b){return b?Math.round(a/b*100)+"%":"—"};
-    var kp=[["Canvasses",rows.length+(rows.length!==all.length?" of "+all.length:"")],["Total value ("+cur+")",fv(spend)],
-      ["Saved vs quote",fv(save)+(quoted>0?" · "+num(save/quoted*100,1)+"%":"")],["Volume",num(mt,1)+" MT"],
-      ["Suppliers",String(Object.keys(sup).length)],["Quotes still valid",(valid+soon)+" of "+rows.length],["COA on file",pct(coaYes,rows.length)],["Final bid done",pct(fin,rows.length)]];
+    var all=allSubs(),rows=dFilter();
+    var pend=rows.filter(function(r){return r.status!=="final"}).length;
+    var live=rows.filter(function(r){var d=validity(r.validityDate).days;return d!==null&&d>=0}).length;
+    var php=rows.filter(function(r){return (r.currency||"PHP")==="PHP"}).reduce(function(a,r){return a+(r.total||0)},0);
+    var usd=rows.filter(function(r){return r.currency==="USD"}).reduce(function(a,r){return a+(r.total||0)},0);
+    var kp=[["Canvasses",rows.length+(rows.length!==all.length?" of "+all.length:"")],["Awaiting final bid",String(pend)],["Quotes still valid",live+" of "+rows.length],["Total (PHP)",money(php,"PHP")]];
+    if(usd>0)kp.push(["Total (USD)",money(usd,"USD")]);
     $("#dKpis").innerHTML=kp.map(function(x){return '<div class="kpi"><small>'+x[0]+'</small><b class="tnum">'+esc(x[1])+'</b></div>'}).join("");
-    if(!rows.length){$("#dGrid").innerHTML='<div class="dcard wide"><div class="dnone"><b style="display:block;color:var(--ink);font-size:16px">No canvasses to show</b>'+(all.length?"Change the filters above.":"Submit a canvass first, or enter the access code if you have one.")+'</div></div>';return}
-    var note=cur==="USD"?"USD canvasses only":"PHP canvasses only";
-    var g=[];
-    g.push(card("Canvasses over time","Submitted per week",cols(series(rows,function(r){return (r.submittedAt||"").slice(0,10)},monday,shortM,function(k){return addDays(k,7)},function(){return 1},12),function(v){return String(v)})));
-    g.push(card("Delivery volume by month","MT scheduled to start each month",cols(series(rows,function(r){return r.deliveryStart},function(d){return d.slice(0,7)},function(k){return new Date(k+"-01T00:00:00").toLocaleDateString("en-PH",{month:"short",year:"2-digit"})},function(k){var y=+k.slice(0,4),m=+k.slice(5,7);return m===12?(y+1)+"-01":y+"-"+String(m+1).padStart(2,"0")},function(r){return (r.qtyKg||0)/1000},12),function(v){return num(v,1)})));
-    g.push(card("Value by material type",note,hbars(tally(inCur,function(r){return r.materialType},function(r){return r.total||0}).map(function(i){i.label=typeLabel(i.k)||i.k;return i}),f,function(i){return TYPE_VAR[i.k]||"var(--accent)"})));
-    g.push(card("Value by delivery warehouse",note,hbars(tally(inCur,function(r){return r.deliveryWarehouse},function(r){return r.total||0}).map(function(i){i.label=whLabel(i.k)||i.k;return i}),f)));
-    g.push(card("Top suppliers by value",note+" · top 10",hbars(tally(inCur,function(r){return r.supplierName},function(r){return r.total||0}),f)));
-    g.push(card("Top materials by value",note+" · top 10",hbars(tally(inCur,function(r){return r.brand},function(r){return r.total||0}),f)));
-    g.push(card("Volume by origin","MT · top 10",hbars(tally(rows,function(r){return r.origin},function(r){return (r.qtyKg||0)/1000}),function(v){return num(v,1)+" MT"})));
-    g.push(card("Submissions by person","Canvasses entered",hbars(tally(rows,function(r){return r.submittedBy},function(){return 1}),function(v){return String(v)})));
-    g.push(card("Quote validity","Days left on each quote",stack([{l:"Valid (>3 days)",v:valid,c:"var(--ok)"},{l:"Expiring (≤3 days)",v:soon,c:"var(--grain)"},{l:"Expired",v:exp,c:"var(--danger)"},{l:"No date",v:nod,c:"var(--line-strong)"}])));
-    g.push(card("Compliance & status","COA availability and final bid",
-      '<div style="font-size:12px;color:var(--muted)">COA available</div>'+stack([{l:"Yes",v:coaYes,c:"var(--ok)"},{l:"No",v:rows.length-coaYes,c:"var(--danger)"}])+
-      '<div style="font-size:12px;color:var(--muted)">Bid status</div>'+stack([{l:"Final bid finalized",v:fin,c:"var(--accent)"},{l:"Submitted",v:rows.length-fin,c:"var(--line-strong)"}])));
-    /* price comparison per material: needs 2+ quotes in the same currency and unit basis (per kg) */
-    var byMat={};inCur.forEach(function(r){var p=perKg(r);if(!(p>0))return;(byMat[r.brand]=byMat[r.brand]||[]).push({p:p,s:r.supplierName,r:r})});
-    var cmp=Object.keys(byMat).filter(function(k){return byMat[k].length>1}).map(function(k){
-      var a=byMat[k].sort(function(x,y){return x.p-y.p}),lo=a[0],hi=a[a.length-1],avg=a.reduce(function(t,x){return t+x.p},0)/a.length;
-      return {m:k,n:a.length,lo:lo,hi:hi,avg:avg,spread:lo.p>0?(hi.p-lo.p)/lo.p*100:0};
-    }).sort(function(a,b){return b.spread-a.spread}).slice(0,10);
-    g.push(card("Price comparison by material","Price per kg (final bid, or quote if none) · materials with 2+ quotes · widest spread first",cmp.length?
-      '<div class="tscroll" style="border:0"><table class="dt"><thead><tr><th>Material</th><th class="n">Quotes</th><th>Lowest (supplier)</th><th class="n">Lowest</th><th class="n">Average</th><th class="n">Highest</th><th class="n">Spread</th></tr></thead><tbody>'+
-      cmp.map(function(c){return '<tr><td>'+esc(c.m)+'</td><td class="n">'+c.n+'</td><td>'+esc(c.lo.s)+'</td><td class="n">'+num(c.lo.p,4)+'</td><td class="n">'+num(c.avg,4)+'</td><td class="n">'+num(c.hi.p,4)+'</td><td class="n">'+num(c.spread,1)+'%</td></tr>'}).join("")+'</tbody></table></div>'
-      :'<div class="dnone">Needs at least two quotes for the same material</div>',true));
-    var soonList=rows.map(function(r){return {r:r,v:validity(r.validityDate)}}).filter(function(x){return x.v.days!==null&&x.v.days>=0&&x.v.days<=14}).sort(function(a,b){return a.v.days-b.v.days}).slice(0,10);
-    g.push(card("Quotes expiring in the next 14 days","Follow up with these suppliers",soonList.length?
-      '<div class="tscroll" style="border:0"><table class="dt"><thead><tr><th>Canvass no.</th><th>Material</th><th>Supplier</th><th>Valid until</th><th>Left</th></tr></thead><tbody>'+
-      soonList.map(function(x){return '<tr><td class="mono">'+esc(x.r.ref)+'</td><td>'+esc(x.r.brand)+'</td><td>'+esc(x.r.supplierName)+'</td><td>'+esc(fmtDate(x.r.validityDate))+'</td><td><span class="chip '+x.v.tone+'">'+esc(x.v.label)+'</span></td></tr>'}).join("")+'</tbody></table></div>'
-      :'<div class="dnone">Nothing expires in the next 14 days</div>',true));
-    $("#dGrid").innerHTML=g.join("");
+    $("#dBody").innerHTML=rows.map(function(r){
+      var v=validity(r.validityDate),fin=r.status==="final",hasFinal=r.finalPrice>0,u=unit(r),diff=hasFinal&&r.price>0?r.price-r.finalPrice:0;
+      return '<tr><td class="mono" style="white-space:nowrap"><a href="index.html?ref='+encodeURIComponent(r.ref)+'" title="Open to update the final bid" style="color:var(--accent);font-weight:700">'+esc(r.ref)+'</a><small>'+esc(fmtDate((r.submittedAt||"").slice(0,10)))+' · '+esc(r.submittedBy)+'</small></td>'+
+        '<td><b>'+esc(r.brand)+'</b><small>'+esc(typeLabel(r.materialType))+(r.origin?' · '+esc(r.origin):'')+'</small></td>'+
+        '<td>'+esc(r.supplierName)+'<small>'+esc(r.supplierLocation)+'</small></td>'+
+        '<td class="n">'+num(r.quantity,3)+' '+u+'</td>'+
+        '<td class="n">'+money(r.price,r.currency)+'<small>per '+u+'</small></td>'+
+        '<td class="n">'+(hasFinal?'<b>'+money(r.finalPrice,r.currency)+'</b><small>per '+u+(diff>0?' · '+money(diff,r.currency)+' below quote':diff<0?' · '+money(-diff,r.currency)+' above quote':'')+'</small>':'<span style="color:var(--muted)">Not yet bid</span>')+'</td>'+
+        '<td class="n"><b>'+money(r.total,r.currency)+'</b></td>'+
+        '<td><span class="chip '+v.tone+'">'+esc(v.label)+'</span><small>'+esc(fmtDate(r.validityDate))+'</small></td>'+
+        '<td style="white-space:nowrap"><span class="chip '+(fin?'ok':'grain')+'">'+(fin?'Final bid':'Awaiting bid')+'</span></td></tr>';
+    }).join("");
+    var em=$("#dEmpty");em.hidden=rows.length>0;
+    em.innerHTML=all.length?"<b>No canvasses match these filters</b>Clear the search or change a filter.":"<b>No canvasses to show</b>Enter the access code above to load the canvass list.";
   }
   function fillDash(){
     $("#dType").innerHTML='<option value="ALL">All types</option>'+TYPES.map(function(t){return '<option value="'+t.id+'">'+t.label+'</option>'}).join("");
     $("#dWh").innerHTML='<option value="ALL">All warehouses</option>'+WH.map(function(w){return '<option value="'+w.id+'">'+w.label+'</option>'}).join("");
-    ["dType","dWh","dCur","dPer"].forEach(function(id){$("#"+id).addEventListener("change",renderDash)});
-    var tip=$("#dtip"),dv=$("#dashView");
-    dv.addEventListener("mouseover",function(e){var el=e.target.closest("[data-tip]");if(!el){tip.hidden=true;return}tip.textContent=el.dataset.tip;tip.hidden=false});
-    dv.addEventListener("mousemove",function(e){if(tip.hidden)return;tip.style.left=Math.min(e.clientX+14,window.innerWidth-tip.offsetWidth-8)+"px";tip.style.top=(e.clientY+16)+"px"});
-    dv.addEventListener("mouseleave",function(){tip.hidden=true});
+    ["dQ","dType","dWh","dStat","dSort"].forEach(function(id){$("#"+id).addEventListener("input",renderDash)});
   }
   fillDash();
   if(getCode())pullSheet();else{showAccess("Enter the access code to view the dashboard.",false);renderDash()}

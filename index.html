@@ -958,6 +958,16 @@
     try{localStorage.setItem(CODE_KEY,v)}catch(e){}
     $("#accessBar").hidden=true;$("#accessCode").value="";pullSheet();toast("Access code saved");
   });
+  /* Opened from the dashboard as index.html?ref=<canvass no.>: load that canvass so its final bid can be updated. */
+  var pendingRef=(function(){try{return new URLSearchParams(location.search).get("ref")||""}catch(e){return ""}})();
+  function openPending(){
+    if(!pendingRef)return;
+    var rec=remote.filter(function(r){return r.ref===pendingRef})[0],want=pendingRef;pendingRef="";
+    if(!rec){toast("Canvass "+want+" was not found.","err");return}
+    loadRecord(rec);
+    toast(rec.status==="final"?want+" is finalized. Reopen it to change the bid.":"Loaded "+want+". Update the final bid price, then save.");
+    var fp=$("#finalPrice");if(fp&&!fp.disabled){fp.scrollIntoView({block:"center"});fp.focus()}
+  }
   async function pullSheet(){
     if(FORMED)return pullForm();
     try{
@@ -965,7 +975,7 @@
       var j=await res.json();
       if(j.error){showAccess(getCode()?"That access code was not accepted. Check it and try again.":"Enter the access code to submit and view the Summary.",!!getCode());return false}
       $("#accessBar").hidden=true;
-      remote=(j.records||[]).filter(validRec);renderSummary();return true;
+      remote=(j.records||[]).filter(validRec);renderSummary();openPending();return true;
     }catch(e){return false}
   }
   async function shareToSheet(rec){
@@ -1006,7 +1016,7 @@
     if(SHEETED){
       /* Monitoring happens in the Google Sheet, so the Summary tab stays hidden. */
       document.querySelector(".imp").hidden=true;
-      if(getCode())pullSheet();else showAccess("Enter the access code to submit canvasses.",false);
+      if(getCode())pullSheet();else showAccess(pendingRef?"Enter the access code to open canvass "+pendingRef+".":"Enter the access code to submit canvasses.",false);
       return;
     }
     if(!window.claude||!window.claude.use)return;
