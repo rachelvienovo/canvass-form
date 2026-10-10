@@ -247,6 +247,42 @@
   #sheet table.grid td{padding:6px 8px;vertical-align:top}
   #sheet table.grid td.n{text-align:right;white-space:nowrap}
   .rkpi{display:flex;flex-wrap:wrap;gap:6px 24px;margin-top:12px;font-size:12px}
+
+  /* ---- dashboard ---- */
+  #dashView{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #dashView{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+  :root[data-theme="dark"] #dashView{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:16px;margin-bottom:16px}
+  .dcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .dcard.wide{grid-column:1/-1}
+  .dcard h3{margin:0;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .dcard .sub{margin:2px 0 12px;font-size:12px;color:var(--muted)}
+  .dnone{padding:20px 0;text-align:center;color:var(--muted);font-size:13px}
+  .hb{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:4px 10px;align-items:center;font-size:13px}
+  .hb .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .hb .t{height:12px;background:var(--bg);border-radius:0 4px 4px 0}
+  .hb .t i{display:block;height:100%;min-width:2px;border-radius:0 4px 4px 0;background:var(--accent)}
+  .hb .v{font:12px var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+  .hb>*:hover{cursor:default}
+  .cols{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:8px;border-bottom:1px solid var(--line-strong)}
+  .cols .c{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
+  .cols .c i{display:block;width:100%;max-width:40px;min-height:2px;border-radius:4px 4px 0 0;background:var(--accent)}
+  .cols .c b{font:11px var(--mono);color:var(--muted);font-weight:400;margin-bottom:2px}
+  .cx{display:flex;gap:6px;margin-top:4px}
+  .cx span{flex:1;min-width:0;text-align:center;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stk{display:flex;gap:2px;height:22px;margin:4px 0 10px}
+  .stk i{display:block;min-width:3px;border-radius:4px}
+  .lg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--ink);margin-top:8px}
+  .lg span{display:inline-flex;align-items:center;gap:6px}
+  .lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .lg em{font-style:normal;font-family:var(--mono);color:var(--muted)}
+  table.dt{width:100%;border-collapse:collapse;font-size:13px}
+  table.dt th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.dt td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.dt td.n,table.dt th.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+  .dtip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:8px;padding:6px 10px;font-size:12.5px;max-width:280px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  .dtools{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+  .dtools .field{min-width:150px;flex:1}
   @page{margin:12mm}
   @page land{size:A4 landscape;margin:10mm}
   #sheet.land{page:land}
@@ -269,6 +305,7 @@
   <nav class="tabs no-print" role="tablist" aria-label="Views" hidden>
     <button type="button" role="tab" id="tabForm" aria-selected="true">New canvass</button>
     <button type="button" role="tab" id="tabSum" aria-selected="false" hidden>Summary <span class="count" id="sumCount">0</span></button>
+    <button type="button" role="tab" id="tabDash" aria-selected="false" hidden>Dashboard</button>
   </nav>
   <div class="no-print" id="accessBar" hidden style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px;padding:12px 16px;border:1px solid var(--grain);background:var(--grain-soft);border-radius:12px">
     <label for="accessCode" style="font-weight:600;font-size:13px">Access code</label>
@@ -479,8 +516,25 @@
       <p class="saved" style="text-align:left;margin-top:12px">Canvasses are kept in this browser on this device. Download the sheet to keep a permanent copy.</p>
     </div>
   </section>
+  <section id="dashView" hidden>
+    <header class="head">
+      <div class="head-main">
+        <img class="logo" id="logo3" alt="Vienovo">
+        <div><p class="eyebrow">Vienovo PH &middot; Raw Materials Procurement</p><h1>Canvass Dashboard</h1></div>
+      </div>
+    </header>
+    <div class="dtools no-print">
+      <div class="field"><label for="dType">Material type</label><select class="inp" id="dType"></select></div>
+      <div class="field"><label for="dWh">Warehouse</label><select class="inp" id="dWh"></select></div>
+      <div class="field"><label for="dCur">Currency</label><select class="inp" id="dCur"><option value="PHP">PHP &#8369;</option><option value="USD">USD $</option></select></div>
+      <div class="field"><label for="dPer">Submitted</label><select class="inp" id="dPer"><option value="0">All time</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option></select></div>
+    </div>
+    <div class="kpis" id="dKpis"></div>
+    <div class="dgrid" id="dGrid"></div>
+  </section>
 </div>
 
+<div class="dtip" id="dtip" hidden></div>
 <div class="toast" id="toast" hidden><div></div></div>
 
 <div class="modal" id="modal" hidden>
@@ -943,7 +997,7 @@
       var res=await fetch(CSV_URL+(CSV_URL.indexOf("?")>-1?"&":"?")+"t="+Date.now(),{cache:"no-store"});
       var rows=parseCsv(await res.text()).slice(1),m={};
       rows.forEach(function(r){try{var rec=JSON.parse(r[r.length-1]);if(validRec(rec))m[rec.ref]=rec}catch(e){}});
-      remote=Object.keys(m).map(function(k){return m[k]});renderSummary();return true;
+      remote=Object.keys(m).map(function(k){return m[k]});revealDash();renderSummary();return true;
     }catch(e){return false}
   }
   /* Shared access code: stored in this browser and sent with every Sheet request. */
@@ -965,7 +1019,7 @@
       var j=await res.json();
       if(j.error){showAccess(getCode()?"That access code was not accepted. Check it and try again.":"Enter the access code to submit and view the Summary.",!!getCode());return false}
       $("#accessBar").hidden=true;
-      remote=(j.records||[]).filter(validRec);renderSummary();return true;
+      remote=(j.records||[]).filter(validRec);revealDash();renderSummary();return true;
     }catch(e){return false}
   }
   async function shareToSheet(rec){
@@ -1015,7 +1069,7 @@
       if(!db||!user)return;
       shared={db:db,uid:await user.id()};
       isAdmin=(await user.canEdit())||(await user.isOwner());
-      $("#tabSum").hidden=false;$("#toSum").hidden=false;$("#liveNote").hidden=false;
+      $("#tabSum").hidden=false;revealDash();$("#toSum").hidden=false;$("#liveNote").hidden=false;
       if(!isAdmin)document.querySelector(".imp").hidden=true;
       db.collection("canvasses").onSnapshot(function(snap){
         remote=[];refDoc={};
@@ -1060,6 +1114,7 @@
   }
   function renderSummary(){
     var all=allSubs();
+    if(!$("#dashView").hidden)renderDash();
     $("#sumCount").textContent=all.length;
     var rows=filtered(),k=totals(rows);
     var kp=[["Canvasses",rows.length+(rows.length!==all.length?" of "+all.length:"")],["Total (PHP)",money(k.php,"PHP")]];
@@ -1095,13 +1150,124 @@
     $("#expCsv").hidden=HOSTED;
     if(HOSTED){$("#tabSum").hidden=true;$("#toSum").hidden=true}
   }
+
+  /* ---- dashboard ---- */
+  var TYPE_VAR={MACRO:"var(--s1)",MICRO:"var(--s2)",PACKAGING:"var(--s3)",FEEDTAGS:"var(--s4)"};
+  function dFilter(){
+    var t=$("#dType").value,w=$("#dWh").value,per=Number($("#dPer").value),today=isoToday();
+    return allSubs().filter(function(r){
+      if(t!=="ALL"&&r.materialType!==t)return false;
+      if(w!=="ALL"&&r.deliveryWarehouse!==w)return false;
+      if(per>0){var d=(r.submittedAt||"").slice(0,10);if(!d||dayDiff(d,today)>per)return false}
+      return true;
+    });
+  }
+  function tally(rows,keyFn,valFn){
+    var m={};rows.forEach(function(r){var k=keyFn(r);if(k==null||k==="")return;m[k]=(m[k]||0)+valFn(r)});
+    return Object.keys(m).map(function(k){return {k:k,v:m[k]}}).sort(function(a,b){return b.v-a.v});
+  }
+  function hbars(items,fmt,colorFn,limit){
+    items=items.slice(0,limit||10);
+    if(!items.length)return '<div class="dnone">No data for these filters</div>';
+    var max=Math.max.apply(null,items.map(function(i){return i.v}))||1;
+    return '<div class="hb">'+items.map(function(i){
+      var lab=i.label||i.k;
+      return '<span class="l" title="'+esc(lab)+'">'+esc(lab)+'</span><span class="t" data-tip="'+esc(lab+": "+fmt(i.v))+'"><i style="width:'+Math.max(1,i.v/max*100)+'%;'+(colorFn?'background:'+colorFn(i):'')+'"></i></span><span class="v">'+esc(fmt(i.v))+'</span>';
+    }).join("")+'</div>';
+  }
+  function cols(items,fmt){
+    if(!items.length)return '<div class="dnone">No data for these filters</div>';
+    var max=Math.max.apply(null,items.map(function(i){return i.v}))||1;
+    return '<div class="cols">'+items.map(function(i){return '<div class="c" data-tip="'+esc(i.label+": "+fmt(i.v))+'"><b>'+(i.v?esc(fmt(i.v)):"")+'</b><i style="height:'+(i.v/max*115)+'px"></i></div>'}).join("")+'</div>'+
+      '<div class="cx">'+items.map(function(i,n){return '<span>'+(n%Math.ceil(items.length/4)===0?esc(i.label):"")+'</span>'}).join("")+'</div>';
+  }
+  function stack(parts){
+    var tot=parts.reduce(function(a,x){return a+x.v},0);
+    if(!tot)return '<div class="dnone">No data for these filters</div>';
+    return '<div class="stk">'+parts.filter(function(x){return x.v>0}).map(function(x){return '<i style="flex:'+x.v+';background:'+x.c+'" data-tip="'+esc(x.l+": "+x.v+" ("+Math.round(x.v/tot*100)+"%)")+'"></i>'}).join("")+'</div>'+
+      '<div class="lg">'+parts.map(function(x){return '<span><i style="background:'+x.c+'"></i>'+esc(x.l)+' <em>'+x.v+' · '+Math.round(x.v/tot*100)+'%</em></span>'}).join("")+'</div>';
+  }
+  function monday(iso){var d=new Date(iso+"T00:00:00"),k=(d.getDay()+6)%7;d.setDate(d.getDate()-k);return d.toLocaleDateString("en-CA")}
+  function addDays(iso,n){var d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return d.toLocaleDateString("en-CA")}
+  function series(rows,dateFn,keyFn,labFn,nextFn,valFn,cap){
+    var m={},keys=[];
+    rows.forEach(function(r){var d=dateFn(r);if(!d)return;var k=keyFn(d);m[k]=(m[k]||0)+valFn(r);keys.push(k)});
+    if(!keys.length)return [];
+    keys.sort();var out=[],k=keys[0],end=keys[keys.length-1],n=0;
+    while(k<=end&&n++<400){out.push({k:k,label:labFn(k),v:m[k]||0});k=nextFn(k)}
+    return out.slice(-cap);
+  }
+  function card(title,sub,body,wide){return '<section class="dcard'+(wide?' wide':'')+'"><h3>'+esc(title)+'</h3><p class="sub">'+esc(sub)+'</p>'+body+'</section>'}
+  function shortM(iso){return new Date(iso+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric"})}
+  function renderDash(){
+    var cur=$("#dCur").value,rows=dFilter(),all=allSubs();
+    var inCur=rows.filter(function(r){return (r.currency||"PHP")===cur});
+    var f=function(v){return money(v,cur)},fv=function(v){return v>=1e6?(cur==="USD"?"$":"₱")+num(v/1e6,2)+"M":v>=1e4?(cur==="USD"?"$":"₱")+num(v/1e3,1)+"K":money(v,cur)};
+    var spend=inCur.reduce(function(a,r){return a+(r.total||0)},0),save=inCur.reduce(function(a,r){return a+(r.savings||0)},0);
+    var quoted=spend+save,mt=rows.reduce(function(a,r){return a+(r.qtyKg||0)},0)/1000;
+    var sup={};rows.forEach(function(r){if(r.supplierName)sup[r.supplierName]=1});
+    var vd=rows.map(function(r){return validity(r.validityDate)});
+    var valid=vd.filter(function(v){return v.days!==null&&v.days>3}).length,soon=vd.filter(function(v){return v.days!==null&&v.days>=0&&v.days<=3}).length,
+        exp=vd.filter(function(v){return v.days!==null&&v.days<0}).length,nod=vd.filter(function(v){return v.days===null}).length;
+    var coaYes=rows.filter(function(r){return r.coaAvailable==="yes"}).length,fin=rows.filter(function(r){return r.status==="final"}).length;
+    var pct=function(a,b){return b?Math.round(a/b*100)+"%":"—"};
+    var kp=[["Canvasses",rows.length+(rows.length!==all.length?" of "+all.length:"")],["Total value ("+cur+")",fv(spend)],
+      ["Saved vs quote",fv(save)+(quoted>0?" · "+num(save/quoted*100,1)+"%":"")],["Volume",num(mt,1)+" MT"],
+      ["Suppliers",String(Object.keys(sup).length)],["Quotes still valid",(valid+soon)+" of "+rows.length],["COA on file",pct(coaYes,rows.length)],["Final bid done",pct(fin,rows.length)]];
+    $("#dKpis").innerHTML=kp.map(function(x){return '<div class="kpi"><small>'+x[0]+'</small><b class="tnum">'+esc(x[1])+'</b></div>'}).join("");
+    if(!rows.length){$("#dGrid").innerHTML='<div class="dcard wide"><div class="dnone"><b style="display:block;color:var(--ink);font-size:16px">No canvasses to show</b>'+(all.length?"Change the filters above.":"Submit a canvass first, or enter the access code if you have one.")+'</div></div>';return}
+    var note=cur==="USD"?"USD canvasses only":"PHP canvasses only";
+    var g=[];
+    g.push(card("Canvasses over time","Submitted per week",cols(series(rows,function(r){return (r.submittedAt||"").slice(0,10)},monday,shortM,function(k){return addDays(k,7)},function(){return 1},12),function(v){return String(v)})));
+    g.push(card("Delivery volume by month","MT scheduled to start each month",cols(series(rows,function(r){return r.deliveryStart},function(d){return d.slice(0,7)},function(k){return new Date(k+"-01T00:00:00").toLocaleDateString("en-PH",{month:"short",year:"2-digit"})},function(k){var y=+k.slice(0,4),m=+k.slice(5,7);return m===12?(y+1)+"-01":y+"-"+String(m+1).padStart(2,"0")},function(r){return (r.qtyKg||0)/1000},12),function(v){return num(v,1)})));
+    g.push(card("Value by material type",note,hbars(tally(inCur,function(r){return r.materialType},function(r){return r.total||0}).map(function(i){i.label=typeLabel(i.k)||i.k;return i}),f,function(i){return TYPE_VAR[i.k]||"var(--accent)"})));
+    g.push(card("Value by delivery warehouse",note,hbars(tally(inCur,function(r){return r.deliveryWarehouse},function(r){return r.total||0}).map(function(i){i.label=whLabel(i.k)||i.k;return i}),f)));
+    g.push(card("Top suppliers by value",note+" · top 10",hbars(tally(inCur,function(r){return r.supplierName},function(r){return r.total||0}),f)));
+    g.push(card("Top materials by value",note+" · top 10",hbars(tally(inCur,function(r){return r.brand},function(r){return r.total||0}),f)));
+    g.push(card("Volume by origin","MT · top 10",hbars(tally(rows,function(r){return r.origin},function(r){return (r.qtyKg||0)/1000}),function(v){return num(v,1)+" MT"})));
+    g.push(card("Submissions by person","Canvasses entered",hbars(tally(rows,function(r){return r.submittedBy},function(){return 1}),function(v){return String(v)})));
+    g.push(card("Quote validity","Days left on each quote",stack([{l:"Valid (>3 days)",v:valid,c:"var(--ok)"},{l:"Expiring (≤3 days)",v:soon,c:"var(--grain)"},{l:"Expired",v:exp,c:"var(--danger)"},{l:"No date",v:nod,c:"var(--line-strong)"}])));
+    g.push(card("Compliance & status","COA availability and final bid",
+      '<div style="font-size:12px;color:var(--muted)">COA available</div>'+stack([{l:"Yes",v:coaYes,c:"var(--ok)"},{l:"No",v:rows.length-coaYes,c:"var(--danger)"}])+
+      '<div style="font-size:12px;color:var(--muted)">Bid status</div>'+stack([{l:"Final bid finalized",v:fin,c:"var(--accent)"},{l:"Submitted",v:rows.length-fin,c:"var(--line-strong)"}])));
+    /* price comparison per material: needs 2+ quotes in the same currency and unit basis (per kg) */
+    var byMat={};inCur.forEach(function(r){var p=perKg(r);if(!(p>0))return;(byMat[r.brand]=byMat[r.brand]||[]).push({p:p,s:r.supplierName,r:r})});
+    var cmp=Object.keys(byMat).filter(function(k){return byMat[k].length>1}).map(function(k){
+      var a=byMat[k].sort(function(x,y){return x.p-y.p}),lo=a[0],hi=a[a.length-1],avg=a.reduce(function(t,x){return t+x.p},0)/a.length;
+      return {m:k,n:a.length,lo:lo,hi:hi,avg:avg,spread:lo.p>0?(hi.p-lo.p)/lo.p*100:0};
+    }).sort(function(a,b){return b.spread-a.spread}).slice(0,10);
+    g.push(card("Price comparison by material","Price per kg (final bid, or quote if none) · materials with 2+ quotes · widest spread first",cmp.length?
+      '<div class="tscroll" style="border:0"><table class="dt"><thead><tr><th>Material</th><th class="n">Quotes</th><th>Lowest (supplier)</th><th class="n">Lowest</th><th class="n">Average</th><th class="n">Highest</th><th class="n">Spread</th></tr></thead><tbody>'+
+      cmp.map(function(c){return '<tr><td>'+esc(c.m)+'</td><td class="n">'+c.n+'</td><td>'+esc(c.lo.s)+'</td><td class="n">'+num(c.lo.p,4)+'</td><td class="n">'+num(c.avg,4)+'</td><td class="n">'+num(c.hi.p,4)+'</td><td class="n">'+num(c.spread,1)+'%</td></tr>'}).join("")+'</tbody></table></div>'
+      :'<div class="dnone">Needs at least two quotes for the same material</div>',true));
+    var soonList=rows.map(function(r){return {r:r,v:validity(r.validityDate)}}).filter(function(x){return x.v.days!==null&&x.v.days>=0&&x.v.days<=14}).sort(function(a,b){return a.v.days-b.v.days}).slice(0,10);
+    g.push(card("Quotes expiring in the next 14 days","Follow up with these suppliers",soonList.length?
+      '<div class="tscroll" style="border:0"><table class="dt"><thead><tr><th>Canvass no.</th><th>Material</th><th>Supplier</th><th>Valid until</th><th>Left</th></tr></thead><tbody>'+
+      soonList.map(function(x){return '<tr><td class="mono">'+esc(x.r.ref)+'</td><td>'+esc(x.r.brand)+'</td><td>'+esc(x.r.supplierName)+'</td><td>'+esc(fmtDate(x.r.validityDate))+'</td><td><span class="chip '+x.v.tone+'">'+esc(x.v.label)+'</span></td></tr>'}).join("")+'</tbody></table></div>'
+      :'<div class="dnone">Nothing expires in the next 14 days</div>',true));
+    $("#dGrid").innerHTML=g.join("");
+  }
+  function revealDash(){$("#tabDash").hidden=false;document.querySelector(".tabs").hidden=false}
+  function fillDash(){
+    $("#dType").innerHTML='<option value="ALL">All types</option>'+TYPES.map(function(t){return '<option value="'+t.id+'">'+t.label+'</option>'}).join("");
+    $("#dWh").innerHTML='<option value="ALL">All warehouses</option>'+WH.map(function(w){return '<option value="'+w.id+'">'+w.label+'</option>'}).join("");
+    $("#logo3").src=LOGO;
+    ["dType","dWh","dCur","dPer"].forEach(function(id){$("#"+id).addEventListener("change",renderDash)});
+    var tip=$("#dtip");
+    $("#dashView").addEventListener("mouseover",function(e){var el=e.target.closest("[data-tip]");if(!el){tip.hidden=true;return}tip.textContent=el.dataset.tip;tip.hidden=false});
+    $("#dashView").addEventListener("mousemove",function(e){if(tip.hidden)return;tip.style.left=Math.min(e.clientX+14,window.innerWidth-tip.offsetWidth-8)+"px";tip.style.top=(e.clientY+16)+"px"});
+    $("#dashView").addEventListener("mouseleave",function(){tip.hidden=true});
+    $("#tabDash").onclick=function(){showView("dash")};
+  }
   fillFilters();
+  fillDash();
   initShared();
   function showView(v){
-    var s=v==="sum";
-    $("#form").hidden=s;$("#sumView").hidden=!s;
-    $("#tabForm").setAttribute("aria-selected",!s);$("#tabSum").setAttribute("aria-selected",s);
+    var s=v==="sum",d=v==="dash";
+    $("#form").hidden=s||d;$("#sumView").hidden=!s;$("#dashView").hidden=!d;
+    $("#tabForm").setAttribute("aria-selected",!s&&!d);$("#tabSum").setAttribute("aria-selected",s);$("#tabDash").setAttribute("aria-selected",d);
     if(s)renderSummary();
+    if(d)renderDash();
     window.scrollTo({top:0});
   }
   $("#tabForm").onclick=function(){showView("form")};
