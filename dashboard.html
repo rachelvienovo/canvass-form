@@ -174,6 +174,8 @@
     <div class="side-foot">
       <div class="conn"><span class="dot" id="connDot"></span><span id="connTxt">Locked</span></div>
       <button type="button" id="changeCode">Change access code</button>
+      <div class="conn" style="margin-top:12px"><span class="dot" id="apDot"></span><span id="apTxt">Approvals locked</span></div>
+      <button type="button" id="apBtn">Unlock approvals</button>
     </div>
   </aside>
   <div class="main">
@@ -214,7 +216,7 @@
         </tr></thead><tbody id="dBody"></tbody></table>
         <div class="empty" id="dEmpty" hidden></div></div>
       </section>
-      <p class="note no-print">Click a row for details. Click a canvass number to update its final bid; use Approve once the final bid is agreed, or Disapprove to reject it. Prices are per unit (kg or MT).</p>
+      <p class="note no-print">Click a row for details. Click a canvass number to update its final bid. Approving or disapproving is restricted to the approver (unlock approvals in the sidebar). Prices are per unit (kg or MT).</p>
     </main>
   </div>
 </div>
@@ -228,6 +230,12 @@
   <div id="aReasonBox" hidden style="margin-top:10px"><label for="aReason" style="font-weight:600;font-size:13px">Reason <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input class="inp" id="aReason" type="text" placeholder="e.g. price above budget"></div>
   <div class="row"><button type="button" class="btn" id="aCancel">Cancel</button><button type="button" class="btn primary" id="aOk"></button></div>
 </div></div>
+<div class="amodal no-print" id="uModal" hidden><div class="box" role="dialog" aria-modal="true" aria-labelledby="uTitle">
+  <h2 id="uTitle">Unlock approvals</h2><p>Only the approver can approve or disapprove canvasses. Enter the approver passcode.</p>
+  <label for="uPass" style="font-weight:600;font-size:13px">Approver passcode</label><input class="inp" id="uPass" type="password" autocomplete="off">
+  <p id="uMsg" style="margin:8px 0 0;color:var(--bad);font-size:12.5px" hidden></p>
+  <div class="row"><button type="button" class="btn" id="uCancel">Cancel</button><button type="button" class="btn primary" id="uOk">Unlock</button></div>
+</div></div>
 <div class="toast" id="toast" hidden><div></div></div>
 
 <script>
@@ -237,7 +245,7 @@
   var TYPES=[{id:"MACRO",label:"Macro",hint:"Grains, meals, oils"},{id:"MICRO",label:"Micro",hint:"Premixes, vitamins, additives"},{id:"PACKAGING",label:"Packaging",hint:"Sacks, liners, thread"},{id:"FEEDTAGS",label:"Feedtags",hint:"Bag tags & labels"}];
   var WH=[{id:"BULACAN",label:"Bulacan"},{id:"PFMC-ISABELA",label:"PFMC-Isabela"},{id:"HOREB",label:"Horeb"},{id:"ARGAO",label:"Argao"},{id:"BUKIDNON",label:"Bukidnon"},{id:"DAVAO (SOUTH)",label:"Davao (South)"}];
   var SHEET_URL="https://script.google.com/macros/s/AKfycbxIUEHibbjrO6yoeVnOlJsAFe1KcQF4JVjXsd34vlz4iUUHbY0fcLKA032rhK94kcwfTw/exec";
-  var CODE_KEY="vienovo-canvass-code", NAME_KEY="vienovo-approver", remote=[], pendingAct=null, page=1, printing=false;
+  var CODE_KEY="vienovo-canvass-code", NAME_KEY="vienovo-approver", APK="vienovo-approver-key", approverOn=false, remote=[], pendingAct=null, page=1, printing=false;
   function isoToday(){return new Date().toLocaleDateString("en-CA")}
   function dayDiff(a,b){return Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000)}
   function fmtDate(i){return i?new Date(i+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"}):"—"}
@@ -259,6 +267,38 @@
   function allSubs(){return remote}
   function unit(r){return r.uom==="MT"?"MT":"kg"}
   function getCode(){try{return localStorage.getItem(CODE_KEY)||""}catch(e){return ""}}
+  /* ---- approver lock: the passcode is checked by the Sheet script, which also refuses approval changes without it ---- */
+  function getApKey(){try{return sessionStorage.getItem(APK)||""}catch(e){return ""}}
+  function setApUi(){
+    $("#apDot").className="dot "+(approverOn?"on":"off");$("#apTxt").textContent=approverOn?"Approvals unlocked":"Approvals locked";$("#apBtn").textContent=approverOn?"Lock approvals":"Unlock approvals";
+  }
+  async function checkApprover(pass){
+    try{
+      var res=await fetch(SHEET_URL+(SHEET_URL.indexOf("?")>-1?"&":"?")+"key="+encodeURIComponent(getCode())+"&approverCheck="+encodeURIComponent(pass)+"&t="+Date.now());
+      var j=await res.json();
+      if(typeof j.approver!=="boolean")return "unsupported";
+      return j.approver?"ok":"bad";
+    }catch(e){return "error"}
+  }
+  async function restoreApprover(){
+    var k=getApKey();if(!k||!getCode())return;
+    if(await checkApprover(k)==="ok"){approverOn=true;setApUi();renderDash()}else{try{sessionStorage.removeItem(APK)}catch(e){}}
+  }
+  function lockApprover(){approverOn=false;try{sessionStorage.removeItem(APK)}catch(e){}setApUi();renderDash()}
+  function openUnlock(){
+    if(!getCode()){showAccess("Enter the access code first.",true);return}
+    $("#uPass").value="";$("#uMsg").hidden=true;$("#uModal").hidden=false;$("#uPass").focus();
+  }
+  async function doUnlock(){
+    var pass=$("#uPass").value;if(!pass)return $("#uPass").focus();
+    var r=await checkApprover(pass),m=$("#uMsg");
+    if(r==="ok"){try{sessionStorage.setItem(APK,pass)}catch(e){}approverOn=true;$("#uModal").hidden=true;setApUi();renderDash();toast("Approvals unlocked")}
+    else{m.hidden=false;m.textContent=r==="bad"?"That passcode is not correct.":r==="unsupported"?"The Google Sheet script has not been updated with the approver lock yet, so approvals stay locked.":"Could not check the passcode. Check your connection."}
+  }
+  $("#apBtn").addEventListener("click",function(){closeSide();if(approverOn)lockApprover();else openUnlock()});
+  $("#uCancel").addEventListener("click",function(){$("#uModal").hidden=true});
+  $("#uOk").addEventListener("click",doUnlock);
+  $("#uPass").addEventListener("keydown",function(e){if(e.key==="Enter")doUnlock();if(e.key==="Escape")$("#uModal").hidden=true});
   function setConn(on){$("#connDot").className="dot "+(on?"on":"off");$("#connTxt").textContent=on?"Connected":"Locked";$("#changeCode").textContent=on?"Change access code":"Enter access code"}
   function showAccess(msg,bad){var bar=$("#accessBar");bar.hidden=false;var m=$("#accessMsg");m.textContent=msg;m.style.color=bad?"var(--bad)":"var(--muted)";setConn(false)}
   function toast(msg,tone){var t=$("#toast");t.className="toast"+(tone==="err"?" err":"");t.firstChild.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){t.hidden=true},4500)}
@@ -267,7 +307,7 @@
       var res=await fetch(SHEET_URL+(SHEET_URL.indexOf("?")>-1?"&":"?")+"key="+encodeURIComponent(getCode())+"&t="+Date.now());
       var j=await res.json();
       if(j.error){showAccess(getCode()?"That access code was not accepted. Check it and try again.":"Enter the access code to view the dashboard.",!!getCode());return false}
-      $("#accessBar").hidden=true;setConn(true);
+      $("#accessBar").hidden=true;setConn(true);if(!approverOn)restoreApprover();
       remote=(j.records||[]).filter(validRec);
       $("#updated").textContent="Updated "+new Date().toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
       renderDash();return true;
@@ -348,9 +388,10 @@
     if(!$("#drawer").hidden&&drawerRef)drawRow(drawerRef,true);
   }
   function approvalCell(r,hasFinal){
-    var ref=esc(r.ref),undo=function(t){return ' <button type="button" class="abtn x no-print" data-reset="'+ref+'" title="'+t+'" aria-label="'+t+' for '+ref+'">&#8634;</button>'};
+    var ref=esc(r.ref),undo=function(t){if(!approverOn)return "";return ' <button type="button" class="abtn x no-print" data-reset="'+ref+'" title="'+t+'" aria-label="'+t+' for '+ref+'">&#8634;</button>'};
     if(r.approved)return '<span style="display:flex;align-items:center;gap:2px"><span class="chip ok" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Approved by '+esc(r.approvedBy||"")+(r.approvedAt?" on "+esc(fmtDate(String(r.approvedAt).slice(0,10))):"")+'">&#10003; '+esc(r.approvedBy||"Approved")+'</span>'+undo("Clear approval")+'</span>';
     if(r.disapproved)return '<span style="display:flex;align-items:center;gap:2px"><span class="chip bad" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Disapproved by '+esc(r.disapprovedBy||"")+(r.disapprovedAt?" on "+esc(fmtDate(String(r.disapprovedAt).slice(0,10))):"")+(r.disapprovalReason?". Reason: "+esc(r.disapprovalReason):"")+'">&#10005; '+esc(r.disapprovedBy||"Disapproved")+'</span>'+undo("Clear disapproval")+'</span>';
+    if(!approverOn)return '<span class="chip">Pending</span>';
     return (hasFinal?'<button type="button" class="abtn no-print" data-approve="'+ref+'">Approve</button> ':'<span class="no-print" style="color:var(--muted)" title="Enter a final bid price before approving">&mdash;</span> ')+
       '<button type="button" class="abtn no no-print" data-disapprove="'+ref+'">Disapprove</button>';
   }
@@ -359,6 +400,7 @@
   function openApproval(refNo,mode){   /* mode: approve | disapprove | reset */
     var r=allSubs().filter(function(x){return x.ref===refNo})[0];if(!r)return;
     if(!getCode()){showAccess("Enter the access code first.",true);return}
+    if(!approverOn){toast("Only the approver can do this. Unlock approvals first.","err");return}
     pendingAct={ref:refNo,mode:mode};
     var reset=mode==="reset",dis=mode==="disapprove";
     $("#aTitle").textContent=reset?"Clear the decision on "+refNo:(dis?"Disapprove ":"Approve ")+refNo;
@@ -386,7 +428,7 @@
     toast("Saving…");
     var msg={approve:rec.ref+" approved",disapprove:rec.ref+" disapproved",reset:"Decision cleared for "+rec.ref}[a.mode];
     try{
-      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:getCode()},rec))});
+      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:getCode(),approverKey:getApKey()},rec))});
       await new Promise(function(res){setTimeout(res,2500)});
       var ok=await pullSheet(),saved=remote.filter(function(x){return x.ref===rec.ref})[0];
       if(ok&&saved&&!!saved.approved===!!rec.approved&&!!saved.disapproved===!!rec.disapproved)toast(msg);
@@ -411,7 +453,7 @@
       '<div class="dsec"><h3>Decision</h3>'+dl([["Status",dec],["Approved by",r.approved?esc(r.approvedBy)+(r.approvedAt?" · "+esc(fmtDate(String(r.approvedAt).slice(0,10))):""):""],["Disapproved by",r.disapproved?esc(r.disapprovedBy)+(r.disapprovedAt?" · "+esc(fmtDate(String(r.disapprovedAt).slice(0,10))):""):""],["Reason",esc(r.disapprovalReason||"")]])+'</div>'+
       '<div class="dsec"><h3>Submission</h3>'+dl([["Submitted by",esc(r.submittedBy)],["Submitted",esc(fmtDate((r.submittedAt||"").slice(0,10)))],["Comments",esc(r.comments||"")]])+'</div></div>'+
       '<div class="foot"><a class="btn" href="index.html?ref='+encodeURIComponent(r.ref)+'">Update final bid</a>'+
-      (r.approved||r.disapproved?'<button type="button" class="btn" data-dreset="'+esc(r.ref)+'">Clear decision</button>':(hasFinal?'<button type="button" class="btn primary" data-dapprove="'+esc(r.ref)+'">Approve</button>':'')+'<button type="button" class="btn danger" data-ddisapprove="'+esc(r.ref)+'">Disapprove</button>')+'</div>';
+      (!approverOn?'':r.approved||r.disapproved?'<button type="button" class="btn" data-dreset="'+esc(r.ref)+'">Clear decision</button>':(hasFinal?'<button type="button" class="btn primary" data-dapprove="'+esc(r.ref)+'">Approve</button>':'')+'<button type="button" class="btn danger" data-ddisapprove="'+esc(r.ref)+'">Disapprove</button>')+'</div>';
     $("#drawer").hidden=false;$("#scrim").hidden=false;
   }
   function closeDrawer(){drawerRef="";$("#drawer").hidden=true;$("#scrim").hidden=true}
@@ -457,7 +499,7 @@
   window.addEventListener("beforeprint",beforePrint);window.addEventListener("afterprint",afterPrint);window.__fit=beforePrint;
   $("#dPrint").addEventListener("click",function(){closeSide();window.print()});
   fillDash();
-  setConn(false);
+  setConn(false);setApUi();
   if(getCode())pullSheet();else{showAccess("Enter the access code to view the dashboard.",false);renderDash()}
 })();
 </script>
