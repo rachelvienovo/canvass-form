@@ -954,12 +954,15 @@
   async function pullSheet(){
     if(FORMED)return pullForm();
     try{
-      var res=await fetch(SHEET_URL+(SHEET_URL.indexOf("?")>-1?"&":"?")+"key="+encodeURIComponent(getCode())+"&t="+Date.now());
-      var j=await res.json();
-      if(j.error){showAccess(getCode()?"That access code was not accepted. Check it and try again.":"Enter the access code to submit and view the Summary.",!!getCode());return false}
-      $("#accessBar").hidden=true;
-      remote=(j.records||[]).filter(validRec);renderSummary();return true;
+      /* The form code can only submit and ask whether one canvass arrived; it cannot read the list. */
+      var j=await sheetCheck("");
+      if(j.error){showAccess(getCode()?"That access code was not accepted. Check it and try again.":"Enter the access code to submit canvasses.",!!getCode());return false}
+      $("#accessBar").hidden=true;return true;
     }catch(e){return false}
+  }
+  async function sheetCheck(refNo){
+    var res=await fetch(SHEET_URL+(SHEET_URL.indexOf("?")>-1?"&":"?")+"key="+encodeURIComponent(getCode())+"&check="+encodeURIComponent(refNo)+"&t="+Date.now());
+    return res.json();
   }
   async function shareToSheet(rec){
     try{
@@ -970,8 +973,9 @@
       }
       await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:getCode()},rec))});
       await new Promise(function(r){setTimeout(r,2500)});
-      var ok=await pullSheet()&&remote.some(function(r){return r.ref===rec.ref});
-      setShareNote(ok);
+      var j=await sheetCheck(rec.ref);
+      if(j.error){showAccess("That access code was not accepted. Check it and submit again.",true);setShareNote(false);return}
+      setShareNote(!!j.exists);
     }catch(e){setShareNote(false)}
   }
   async function shareRecord(rec){
